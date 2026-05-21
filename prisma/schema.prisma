@@ -1,0 +1,125 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Admin {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Category {
+  id        String    @id @default(uuid())
+  name      String
+  slug      String    @unique
+  createdAt DateTime  @default(now())
+  products  Product[]
+}
+
+model Product {
+  id              String           @id @default(uuid())
+  name            String
+  slug            String           @unique
+  description     String?
+  price           Float
+  oldPrice        Float?
+  images          String[]
+  sizes           String[]
+  colors          String[]
+  stock           Int              @default(0)
+  isActive        Boolean          @default(true)
+  isFeatured      Boolean          @default(false)
+  categoryId      String?
+  category        Category?        @relation(fields: [categoryId], references: [id])
+  metaTitle       String?
+  metaDescription String?
+  metaKeywords    String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  orderItems      OrderItem[]
+  colorVariants   ColorVariant[]
+}
+
+// كل لون في المنتج له صوره الخاصة ومقاساته
+model ColorVariant {
+  id        String         @id @default(uuid())
+  productId String
+  product   Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name      String         // اسم اللون (يدوي)
+  images    String[]       // صور اللون
+  createdAt DateTime       @default(now())
+  sizes     SizeVariant[]
+}
+
+// كل مقاس في اللون له stock خاص
+model SizeVariant {
+  id             String       @id @default(uuid())
+  colorVariantId String
+  colorVariant   ColorVariant @relation(fields: [colorVariantId], references: [id], onDelete: Cascade)
+  size           String       // اسم المقاس
+  stock          Int          @default(0)
+  createdAt      DateTime     @default(now())
+}
+
+model Order {
+  id          String      @id @default(uuid())
+  orderNumber String      @unique
+  status      OrderStatus @default(PENDING)
+  totalAmount Float
+  discount    Float       @default(0)
+  couponCode  String?
+  customer    Json
+  notes       String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  items       OrderItem[]
+}
+
+model OrderItem {
+  id        String  @id @default(uuid())
+  orderId   String
+  productId String
+  quantity  Int
+  size      String?
+  color     String?
+  price     Float
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id])
+}
+
+model Coupon {
+  id            String       @id @default(uuid())
+  code          String       @unique
+  type          DiscountType @default(PERCENTAGE)
+  value         Float
+  minOrderValue Float        @default(0)
+  maxUses       Int?
+  usedCount     Int          @default(0)
+  isActive      Boolean      @default(true)
+  expiresAt     DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED
+}

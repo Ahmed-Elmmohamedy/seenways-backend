@@ -142,3 +142,10 @@ model AbandonedCart {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+model Governorate {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  shippingFee Float    @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+}

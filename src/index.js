@@ -8,6 +8,7 @@ const adminRoutes = require("./routes/admin");
 const uploadRoutes = require("./routes/upload");
 const categoryRoutes = require("./routes/categories");
 const couponRoutes = require("./routes/coupons");
+const blacklistRouter = require("./routes/blacklist");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -24,6 +25,7 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/coupons", couponRoutes);
+app.use("/api/blacklist", blacklistRouter);
 
 app.use((req, res) => res.status(404).json({ error: "Route not found" }));
 app.use((err, req, res, next) => {

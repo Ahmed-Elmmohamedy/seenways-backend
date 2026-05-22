@@ -4,7 +4,25 @@ const auth = require("../middleware/auth");
 const router = express.Router();
 
 function generateOrderNumber() {
-  return "SW-" + Date.now().toString().slice(-8);
+  return "SW-" + Date.now().toString().slice(-6) + "-" + Math.floor(Math.random() * 1000).toString().padStart(3, "0");
+}
+
+// Risk Score Calculator
+function calculateRiskScore(customer, previousOrders) {
+  let score = 0;
+  const reasons = [];
+
+  if (previousOrders >= 3) { score += 50; reasons.push("أكثر من 3 طلبات سابقة"); }
+  else if (previousOrders >= 1) { score += 20; reasons.push("طلبات سابقة"); }
+
+  if (/\d/.test(customer.name)) { score += 30; reasons.push("اسم يحتوي على أرقام"); }
+  if (customer.name.trim().split(" ").length < 2) { score += 15; reasons.push("اسم من كلمة واحدة"); }
+  if (customer.address && customer.address.trim().length < 15) { score += 20; reasons.push("عنوان قصير"); }
+
+  const hour = new Date().getUTCHours() + 2;
+  if (hour >= 23 || hour <= 5) { score += 10; reasons.push("طلب في وقت متأخر"); }
+
+  return { score: Math.min(score, 100), reasons };
 }
 
 // PUBLIC - Validate coupon
@@ -12,17 +30,12 @@ router.post("/validate-coupon", async (req, res) => {
   try {
     const { code, orderTotal } = req.body;
     if (!code) return res.status(400).json({ error: "Coupon code required" });
-
     const coupon = await prisma.coupon.findUnique({ where: { code: code.toUpperCase() } });
-    if (!coupon || !coupon.isActive) return res.status(404).json({ error: "Invalid coupon code" });
-    if (coupon.expiresAt && new Date() > coupon.expiresAt) return res.status(400).json({ error: "Coupon has expired" });
-    if (coupon.maxUses && coupon.usedCount >= coupon.maxUses) return res.status(400).json({ error: "Coupon usage limit reached" });
-    if (orderTotal < coupon.minOrderValue) return res.status(400).json({ error: `Minimum order value is ${coupon.minOrderValue} ج.م` });
-
-    const discount = coupon.type === "PERCENTAGE"
-      ? (orderTotal * coupon.value) / 100
-      : Math.min(coupon.value, orderTotal);
-
+    if (!coupon || !coupon.isActive) return res.status(404).json({ error: "كود الخصم غير صحيح" });
+    if (coupon.expiresAt && new Date() > coupon.expiresAt) return res.status(400).json({ error: "انتهت صلاحية كود الخصم" });
+    if (coupon.maxUses && coupon.usedCount >= coupon.maxUses) return res.status(400).json({ error: "تم استخدام الكود بالحد الأقصى" });
+    if (orderTotal < coupon.minOrderValue) return res.status(400).json({ error: `الحد الأدنى للطلب ${coupon.minOrderValue} ج.م` });
+    const discount = coupon.type === "PERCENTAGE" ? (orderTotal * coupon.value) / 100 : Math.min(coupon.value, orderTotal);
     res.json({ valid: true, coupon, discount: Math.round(discount * 100) / 100 });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -33,23 +46,40 @@ router.post("/validate-coupon", async (req, res) => {
 router.post("/", async (req, res) => {
   try {
     const { customer, items, notes, couponCode } = req.body;
-    if (!customer || !items || items.length === 0) return res.status(400).json({ error: "Customer info and items are required" });
-    if (!customer.name || !customer.phone || !customer.address) return res.status(400).json({ error: "Name, phone, and address are required" });
+    if (!customer || !items || items.length === 0) return res.status(400).json({ error: "بيانات الطلب غير مكتملة" });
 
-    // Rate limiting per phone
+    // Validate phone (Egyptian format)
+    const phoneClean = customer.phone?.replace(/\s/g, "");
+    const phoneRegex = /^(010|011|012|015)\d{8}$/;
+    if (!phoneRegex.test(phoneClean)) return res.status(400).json({ error: "رقم التليفون غير صحيح. يجب أن يبدأ بـ 010 أو 011 أو 012 أو 015" });
+
+    // Validate name
+    if (!customer.name || customer.name.trim().length < 3) return res.status(400).json({ error: "الاسم يجب أن يكون 3 أحرف على الأقل" });
+    if (/[0-9!@#$%^&*()_+=\[\]{};':"\\|,.<>\/?]/.test(customer.name)) return res.status(400).json({ error: "الاسم يجب أن يحتوي على أحرف فقط" });
+
+    // Check blacklist
+    const blacklisted = await prisma.blacklist.findUnique({ where: { phone: phoneClean } });
+    if (blacklisted) return res.status(403).json({ error: "عذراً، لا يمكن إتمام الطلب. تواصل معنا للمساعدة." });
+
+    // Rate limiting (1 order per 5 min per phone)
     const recentOrder = await prisma.order.findFirst({
-      where: { customer: { path: ["phone"], equals: customer.phone }, createdAt: { gte: new Date(Date.now() - 5 * 60 * 1000) } }
+      where: { customer: { path: ["phone"], equals: phoneClean }, createdAt: { gte: new Date(Date.now() - 5 * 60 * 1000) } }
     });
-    if (recentOrder) return res.status(429).json({ error: "Please wait before placing another order" });
+    if (recentOrder) return res.status(429).json({ error: "برجاء الانتظار قليلاً قبل تقديم طلب جديد" });
 
+    // Count previous orders for risk score
+    const previousOrders = await prisma.order.count({ where: { customer: { path: ["phone"], equals: phoneClean } } });
+
+    // Calculate risk score
+    const { score: riskScore, reasons: riskReasons } = calculateRiskScore({ ...customer, phone: phoneClean }, previousOrders);
+
+    // Validate items and calculate total
     let totalAmount = 0;
     const orderItems = [];
-
     for (const item of items) {
       const product = await prisma.product.findUnique({ where: { id: item.productId } });
-      if (!product || !product.isActive) return res.status(400).json({ error: `Product not found: ${item.productId}` });
-      const itemPrice = product.price * item.quantity;
-      totalAmount += itemPrice;
+      if (!product || !product.isActive) return res.status(400).json({ error: `المنتج غير متاح` });
+      totalAmount += product.price * item.quantity;
       orderItems.push({ productId: product.id, quantity: item.quantity, size: item.size || null, color: item.color || null, price: product.price });
     }
 
@@ -58,18 +88,10 @@ router.post("/", async (req, res) => {
     let appliedCoupon = null;
     if (couponCode) {
       appliedCoupon = await prisma.coupon.findUnique({ where: { code: couponCode.toUpperCase() } });
-      if (appliedCoupon && appliedCoupon.isActive) {
-        if (!appliedCoupon.expiresAt || new Date() <= appliedCoupon.expiresAt) {
-          if (!appliedCoupon.maxUses || appliedCoupon.usedCount < appliedCoupon.maxUses) {
-            if (totalAmount >= appliedCoupon.minOrderValue) {
-              discount = appliedCoupon.type === "PERCENTAGE"
-                ? (totalAmount * appliedCoupon.value) / 100
-                : Math.min(appliedCoupon.value, totalAmount);
-              discount = Math.round(discount * 100) / 100;
-              await prisma.coupon.update({ where: { id: appliedCoupon.id }, data: { usedCount: { increment: 1 } } });
-            }
-          }
-        }
+      if (appliedCoupon && appliedCoupon.isActive && (!appliedCoupon.expiresAt || new Date() <= appliedCoupon.expiresAt) && (!appliedCoupon.maxUses || appliedCoupon.usedCount < appliedCoupon.maxUses) && totalAmount >= appliedCoupon.minOrderValue) {
+        discount = appliedCoupon.type === "PERCENTAGE" ? (totalAmount * appliedCoupon.value) / 100 : Math.min(appliedCoupon.value, totalAmount);
+        discount = Math.round(discount * 100) / 100;
+        await prisma.coupon.update({ where: { id: appliedCoupon.id }, data: { usedCount: { increment: 1 } } });
       }
     }
 
@@ -79,7 +101,9 @@ router.post("/", async (req, res) => {
         totalAmount: totalAmount - discount,
         discount,
         couponCode: appliedCoupon ? appliedCoupon.code : null,
-        customer,
+        riskScore,
+        riskReasons,
+        customer: { ...customer, phone: phoneClean },
         notes: notes || null,
         items: { create: orderItems },
       },
@@ -99,7 +123,6 @@ router.get("/", auth, async (req, res) => {
     const where = {};
     if (status) where.status = status;
     if (search) where.orderNumber = { contains: search, mode: "insensitive" };
-
     const [orders, total] = await Promise.all([
       prisma.order.findMany({ where, include: { items: { include: { product: true } } }, orderBy: { createdAt: "desc" }, skip: (page - 1) * limit, take: parseInt(limit) }),
       prisma.order.count({ where }),
@@ -152,16 +175,13 @@ router.get("/export/csv", auth, async (req, res) => {
     const where = {};
     if (status) where.status = status;
     if (from || to) where.createdAt = { ...(from ? { gte: new Date(from) } : {}), ...(to ? { lte: new Date(to) } : {}) };
-
     const orders = await prisma.order.findMany({ where, include: { items: { include: { product: true } } }, orderBy: { createdAt: "desc" } });
-
-    const headers = ["Order Number", "Status", "Customer Name", "Phone", "City", "Address", "Total", "Discount", "Coupon", "Items", "Date"];
+    const headers = ["Order Number", "Status", "Risk Score", "Customer Name", "Phone", "City", "Address", "Total", "Discount", "Coupon", "Items", "Date"];
     const rows = orders.map(o => {
       const c = o.customer;
       const items = o.items.map(i => `${i.product?.name} x${i.quantity}`).join(" | ");
-      return [o.orderNumber, o.status, c.name, c.phone, c.city, c.address, o.totalAmount, o.discount || 0, o.couponCode || "", items, new Date(o.createdAt).toLocaleDateString()].join(",");
+      return [o.orderNumber, o.status, o.riskScore || 0, c.name, c.phone, c.city, c.address, o.totalAmount, o.discount || 0, o.couponCode || "", items, new Date(o.createdAt).toLocaleDateString()].join(",");
     });
-
     const csv = [headers.join(","), ...rows].join("\n");
     res.setHeader("Content-Type", "text/csv");
     res.setHeader("Content-Disposition", `attachment; filename=orders-${Date.now()}.csv`);

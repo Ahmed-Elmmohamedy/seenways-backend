@@ -78,10 +78,12 @@ model Order {
   discount    Float       @default(0)
   couponCode  String?
   customer    Json
-  notes       String?
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  items       OrderItem[]
+  notes        String?
+  riskScore    Int         @default(0)
+  riskReasons  String[]
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  items        OrderItem[]
 }
 
 model OrderItem {

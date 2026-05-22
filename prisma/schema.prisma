@@ -123,3 +123,20 @@ enum DiscountType {
   PERCENTAGE
   FIXED
 }
+model Blacklist {
+  id        String   @id @default(uuid())
+  phone     String   @unique
+  reason    String?
+  createdAt DateTime @default(now())
+}
+
+model AbandonedCart {
+  id        String   @id @default(uuid())
+  phone     String?
+  name      String?
+  email     String?
+  items     Json
+  total     Float
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

@@ -10,6 +10,7 @@ const categoryRoutes = require("./routes/categories");
 const couponRoutes = require("./routes/coupons");
 const blacklistRouter = require("./routes/blacklist");
 const governoratesRouter = require("./routes/governorates");
+const abandonedCartsRouter = require("./routes/abandoned-carts");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -28,6 +29,7 @@ app.use("/api/categories", categoryRoutes);
 app.use("/api/coupons", couponRoutes);
 app.use("/api/blacklist", blacklistRouter);
 app.use("/api/governorates", governoratesRouter);
+app.use("/api/abandoned-carts", abandonedCartsRouter);
 
 app.use((req, res) => res.status(404).json({ error: "Route not found" }));
 app.use((err, req, res, next) => {

@@ -1,6 +1,6 @@
 {
   "name": "seenways-backend",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "SEENWAYS E-commerce Backend API",
   "main": "src/index.js",
   "scripts": {

@@ -19,7 +19,7 @@ app.use(cors({ origin: "*", credentials: true }));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
-app.get("/", (req, res) => res.json({ status: "ok", message: "SEENWAYS API is running", version: "2.0.0" }));
+app.get("/", (req, res) => res.json({ status: "ok", message: "SEENWAYS API is running", version: "2.1.0" }));
 
 app.use("/api/products", productRoutes);
 app.use("/api/orders", orderRoutes);

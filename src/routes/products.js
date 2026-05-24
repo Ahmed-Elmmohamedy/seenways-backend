@@ -63,7 +63,7 @@ router.get("/:slug", async (req, res) => {
 // ADMIN - Create product with color variants
 router.post("/", auth, async (req, res) => {
   try {
-    const { name, description, price, oldPrice, images, sizes, colors, stock, isActive, isFeatured, categoryId, metaTitle, metaDescription, metaKeywords, colorVariants } = req.body;
+    const { name, description, price, oldPrice, images, sizes, colors, stock, isActive, isFeatured, categoryId, metaTitle, metaDescription, metaKeywords, colorVariants, bundles } = req.body;
     if (!name || !price) return res.status(400).json({ error: "Name and price are required" });
     let slug = slugify(name);
     const existing = await prisma.product.findUnique({ where: { slug } });
@@ -84,6 +84,7 @@ router.post("/", auth, async (req, res) => {
         metaTitle: metaTitle || null,
         metaDescription: metaDescription || null,
         metaKeywords: metaKeywords || null,
+        bundles: bundles || null,
         // Create color variants if provided
         colorVariants: colorVariants?.length ? {
           create: colorVariants.map(cv => ({
@@ -109,7 +110,7 @@ router.post("/", auth, async (req, res) => {
 // ADMIN - Update product
 router.put("/:id", auth, async (req, res) => {
   try {
-    const { name, description, price, oldPrice, images, sizes, colors, stock, isActive, isFeatured, categoryId, metaTitle, metaDescription, metaKeywords, colorVariants } = req.body;
+    const { name, description, price, oldPrice, images, sizes, colors, stock, isActive, isFeatured, categoryId, metaTitle, metaDescription, metaKeywords, colorVariants, bundles } = req.body;
     const data = {};
     if (name !== undefined) { data.name = name; data.slug = slugify(name); }
     if (description !== undefined) data.description = description;
@@ -125,6 +126,7 @@ router.put("/:id", auth, async (req, res) => {
     if (metaTitle !== undefined) data.metaTitle = metaTitle || null;
     if (metaDescription !== undefined) data.metaDescription = metaDescription || null;
     if (metaKeywords !== undefined) data.metaKeywords = metaKeywords || null;
+    if (bundles !== undefined) data.bundles = bundles || null;
 
     // Update color variants: delete all and recreate
     if (colorVariants !== undefined) {

@@ -79,8 +79,27 @@ router.post("/", async (req, res) => {
     for (const item of items) {
       const product = await prisma.product.findUnique({ where: { id: item.productId } });
       if (!product || !product.isActive) return res.status(400).json({ error: `المنتج غير متاح` });
-      totalAmount += product.price * item.quantity;
-      orderItems.push({ productId: product.id, quantity: item.quantity, size: item.size || null, color: item.color || null, price: product.price });
+      
+      if (item.isBundle && item.bundlePrice) {
+        // Bundle: use bundle price, add each piece as separate order item
+        totalAmount += item.bundlePrice;
+        if (item.bundleItems && item.bundleItems.length > 0) {
+          item.bundleItems.forEach((piece, idx) => {
+            orderItems.push({
+              productId: product.id,
+              quantity: 1,
+              size: piece.size || null,
+              color: piece.color || null,
+              price: idx === 0 ? item.bundlePrice : 0,
+            });
+          });
+        } else {
+          orderItems.push({ productId: product.id, quantity: item.bundleQuantity || 1, size: null, color: null, price: item.bundlePrice });
+        }
+      } else {
+        totalAmount += product.price * item.quantity;
+        orderItems.push({ productId: product.id, quantity: item.quantity, size: item.size || null, color: item.color || null, price: product.price });
+      }
     }
 
     // Apply coupon

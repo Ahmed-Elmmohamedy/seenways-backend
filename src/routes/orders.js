@@ -135,6 +135,45 @@ router.post("/", async (req, res) => {
   }
 });
 
+// PUBLIC - Track order by orderNumber + phone
+router.get("/track/:orderNumber", async (req, res) => {
+  try {
+    const { phone } = req.query;
+    if (!phone) return res.status(400).json({ error: "Phone number required" });
+
+    const order = await prisma.order.findFirst({
+      where: {
+        orderNumber: req.params.orderNumber.toUpperCase(),
+        customer: { path: ["phone"], equals: phone.replace(/\s/g, "") }
+      },
+      include: { items: { include: { product: true } } }
+    });
+
+    if (!order) return res.status(404).json({ error: "Order not found. Please check your order number and phone number." });
+
+    res.json({
+      orderNumber: order.orderNumber,
+      status: order.status,
+      totalAmount: order.totalAmount,
+      createdAt: order.createdAt,
+      customer: {
+        name: order.customer.name,
+        city: order.customer.city,
+      },
+      items: order.items.map(i => ({
+        name: i.product?.name,
+        price: i.price,
+        quantity: i.quantity,
+        size: i.size,
+        color: i.color,
+        image: i.product?.images?.[0] || null,
+      }))
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ADMIN - Get all orders
 router.get("/", auth, async (req, res) => {
   try {

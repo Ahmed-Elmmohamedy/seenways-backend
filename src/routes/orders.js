@@ -80,6 +80,7 @@ router.post("/", async (req, res) => {
       const product = await prisma.product.findUnique({ where: { id: item.productId } });
       if (!product || !product.isActive) return res.status(400).json({ error: `المنتج غير متاح` });
       
+      console.log('Item received:', JSON.stringify({ isBundle: item.isBundle, bundlePrice: item.bundlePrice, quantity: item.quantity }));
       if (item.isBundle && item.bundlePrice) {
         // Bundle: use bundle price, add each piece as separate order item
         totalAmount += item.bundlePrice;

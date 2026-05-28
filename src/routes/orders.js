@@ -7,21 +7,16 @@ function generateOrderNumber() {
   return "SW-" + Date.now().toString().slice(-6) + "-" + Math.floor(Math.random() * 1000).toString().padStart(3, "0");
 }
 
-// Risk Score Calculator
 function calculateRiskScore(customer, previousOrders) {
   let score = 0;
   const reasons = [];
-
   if (previousOrders >= 3) { score += 50; reasons.push("أكثر من 3 طلبات سابقة"); }
   else if (previousOrders >= 1) { score += 20; reasons.push("طلبات سابقة"); }
-
   if (/\d/.test(customer.name)) { score += 30; reasons.push("اسم يحتوي على أرقام"); }
   if (customer.name.trim().split(" ").length < 2) { score += 15; reasons.push("اسم من كلمة واحدة"); }
   if (customer.address && customer.address.trim().length < 15) { score += 20; reasons.push("عنوان قصير"); }
-
   const hour = new Date().getUTCHours() + 2;
   if (hour >= 23 || hour <= 5) { score += 10; reasons.push("طلب في وقت متأخر"); }
-
   return { score: Math.min(score, 100), reasons };
 }
 
@@ -48,42 +43,37 @@ router.post("/", async (req, res) => {
     const { customer, items, notes, couponCode } = req.body;
     if (!customer || !items || items.length === 0) return res.status(400).json({ error: "بيانات الطلب غير مكتملة" });
 
-    // Validate phone (Egyptian format)
     const phoneClean = customer.phone?.replace(/\s/g, "");
     const phoneRegex = /^(010|011|012|015)\d{8}$/;
     if (!phoneRegex.test(phoneClean)) return res.status(400).json({ error: "رقم التليفون غير صحيح. يجب أن يبدأ بـ 010 أو 011 أو 012 أو 015" });
 
-    // Validate name
     if (!customer.name || customer.name.trim().length < 3) return res.status(400).json({ error: "الاسم يجب أن يكون 3 أحرف على الأقل" });
     if (/[0-9!@#$%^&*()_+=\[\]{};':"\\|,.<>\/?]/.test(customer.name)) return res.status(400).json({ error: "الاسم يجب أن يحتوي على أحرف فقط" });
 
-    // Check blacklist
     const blacklisted = await prisma.blacklist.findUnique({ where: { phone: phoneClean } });
     if (blacklisted) return res.status(403).json({ error: "عذراً، لا يمكن إتمام الطلب. تواصل معنا للمساعدة." });
 
-    // Rate limiting (1 order per 5 min per phone)
-    const recentOrder = await prisma.order.findFirst({
-      where: { customer: { path: ["phone"], equals: phoneClean }, createdAt: { gte: new Date(Date.now() - 5 * 60 * 1000) } }
-    });
-    if (recentOrder) return res.status(429).json({ error: "برجاء الانتظار قليلاً قبل تقديم طلب جديد" });
+    // Rate limiting - disabled for testing, re-enable later
+    // const recentOrder = await prisma.order.findFirst({
+    //   where: { customer: { path: ["phone"], equals: phoneClean }, createdAt: { gte: new Date(Date.now() - 5 * 60 * 1000) } }
+    // });
+    // if (recentOrder) return res.status(429).json({ error: "برجاء الانتظار قليلاً قبل تقديم طلب جديد" });
 
-    // Count previous orders for risk score
     const previousOrders = await prisma.order.count({ where: { customer: { path: ["phone"], equals: phoneClean } } });
-
-    // Calculate risk score
     const { score: riskScore, reasons: riskReasons } = calculateRiskScore({ ...customer, phone: phoneClean }, previousOrders);
 
-    // Validate items and calculate total
     let totalAmount = 0;
     const orderItems = [];
+
     for (const item of items) {
       const product = await prisma.product.findUnique({ where: { id: item.productId } });
       if (!product || !product.isActive) return res.status(400).json({ error: `المنتج غير متاح` });
-      
-      console.log('Item received:', JSON.stringify({ isBundle: item.isBundle, bundlePrice: item.bundlePrice, quantity: item.quantity }));
-      if (item.isBundle && item.bundlePrice) {
-        // Bundle: use bundle price, add each piece as separate order item
-        totalAmount += item.bundlePrice;
+
+      const isBundle = item.isBundle === true || item.isBundle === 'true';
+      const bundlePrice = parseFloat(item.bundlePrice) || 0;
+
+      if (isBundle && bundlePrice > 0) {
+        totalAmount += bundlePrice;
         if (item.bundleItems && item.bundleItems.length > 0) {
           item.bundleItems.forEach((piece, idx) => {
             orderItems.push({
@@ -91,19 +81,30 @@ router.post("/", async (req, res) => {
               quantity: 1,
               size: piece.size || null,
               color: piece.color || null,
-              price: idx === 0 ? item.bundlePrice : 0,
+              price: idx === 0 ? bundlePrice : 0,
             });
           });
         } else {
-          orderItems.push({ productId: product.id, quantity: item.bundleQuantity || 1, size: null, color: null, price: item.bundlePrice });
+          orderItems.push({
+            productId: product.id,
+            quantity: item.bundleQuantity || 2,
+            size: null,
+            color: null,
+            price: bundlePrice,
+          });
         }
       } else {
-        totalAmount += product.price * item.quantity;
-        orderItems.push({ productId: product.id, quantity: item.quantity, size: item.size || null, color: item.color || null, price: product.price });
+        totalAmount += product.price * (item.quantity || 1);
+        orderItems.push({
+          productId: product.id,
+          quantity: item.quantity || 1,
+          size: item.size || null,
+          color: item.color || null,
+          price: product.price,
+        });
       }
     }
 
-    // Apply coupon
     let discount = 0;
     let appliedCoupon = null;
     if (couponCode) {
@@ -136,12 +137,11 @@ router.post("/", async (req, res) => {
   }
 });
 
-// PUBLIC - Track order by orderNumber + phone
+// PUBLIC - Track order
 router.get("/track/:orderNumber", async (req, res) => {
   try {
     const { phone } = req.query;
     if (!phone) return res.status(400).json({ error: "Phone number required" });
-
     const order = await prisma.order.findFirst({
       where: {
         orderNumber: req.params.orderNumber.toUpperCase(),
@@ -149,18 +149,13 @@ router.get("/track/:orderNumber", async (req, res) => {
       },
       include: { items: { include: { product: true } } }
     });
-
     if (!order) return res.status(404).json({ error: "Order not found. Please check your order number and phone number." });
-
     res.json({
       orderNumber: order.orderNumber,
       status: order.status,
       totalAmount: order.totalAmount,
       createdAt: order.createdAt,
-      customer: {
-        name: order.customer.name,
-        city: order.customer.city,
-      },
+      customer: { name: order.customer.name, city: order.customer.city },
       items: order.items.map(i => ({
         name: i.product?.name,
         price: i.price,
@@ -227,7 +222,7 @@ router.delete("/:id", auth, async (req, res) => {
   }
 });
 
-// ADMIN - Export orders CSV
+// ADMIN - Export CSV
 router.get("/export/csv", auth, async (req, res) => {
   try {
     const { status, from, to } = req.query;

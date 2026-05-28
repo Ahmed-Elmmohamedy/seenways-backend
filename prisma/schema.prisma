@@ -50,23 +50,21 @@ model Product {
   colorVariants   ColorVariant[]
 }
 
-// كل لون في المنتج له صوره الخاصة ومقاساته
 model ColorVariant {
   id        String         @id @default(uuid())
   productId String
   product   Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
-  name      String         // اسم اللون (يدوي)
-  images    String[]       // صور اللون
+  name      String
+  images    String[]
   createdAt DateTime       @default(now())
   sizes     SizeVariant[]
 }
 
-// كل مقاس في اللون له stock خاص
 model SizeVariant {
   id             String       @id @default(uuid())
   colorVariantId String
   colorVariant   ColorVariant @relation(fields: [colorVariantId], references: [id], onDelete: Cascade)
-  size           String       // اسم المقاس
+  size           String
   stock          Int          @default(0)
   createdAt      DateTime     @default(now())
 }
@@ -79,24 +77,24 @@ model Order {
   discount    Float       @default(0)
   couponCode  String?
   customer    Json
-  notes        String?
-  riskScore    Int         @default(0)
-  riskReasons  String[]
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
-  items        OrderItem[]
+  notes       String?
+  riskScore   Int         @default(0)
+  riskReasons String[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  items       OrderItem[]
 }
 
 model OrderItem {
-  id        String  @id @default(uuid())
+  id        String   @id @default(uuid())
   orderId   String
-  productId String
+  productId String?
   quantity  Int
   size      String?
   color     String?
   price     Float
-  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product   Product @relation(fields: [productId], references: [id])
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product   Product? @relation(fields: [productId], references: [id])
 }
 
 model Coupon {
@@ -126,6 +124,7 @@ enum DiscountType {
   PERCENTAGE
   FIXED
 }
+
 model Blacklist {
   id        String   @id @default(uuid())
   phone     String   @unique
@@ -143,6 +142,7 @@ model AbandonedCart {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
 model Governorate {
   id          String   @id @default(uuid())
   name        String   @unique

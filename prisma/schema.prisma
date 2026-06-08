@@ -26,37 +26,39 @@ model Category {
 }
 
 model Product {
-  id              String           @id @default(uuid())
-  name            String
-  slug            String           @unique
-  description     String?
-  price           Float
-  oldPrice        Float?
-  images          String[]
-  sizes           String[]
-  colors          String[]
-  stock           Int              @default(0)
-  isActive        Boolean          @default(true)
-  isFeatured      Boolean          @default(false)
-  categoryId      String?
-  category        Category?        @relation(fields: [categoryId], references: [id])
-  metaTitle       String?
-  metaDescription String?
-  metaKeywords    String?
-  bundles         Json?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-  orderItems      OrderItem[]
-  colorVariants   ColorVariant[]
+  id                 String              @id @default(uuid())
+  name               String
+  slug               String              @unique
+  description        String?
+  price              Float
+  oldPrice           Float?
+  images             String[]
+  sizes              String[]
+  colors             String[]
+  stock              Int                 @default(0)
+  isActive           Boolean             @default(true)
+  isFeatured         Boolean             @default(false)
+  categoryId         String?
+  category           Category?           @relation(fields: [categoryId], references: [id])
+  metaTitle          String?
+  metaDescription    String?
+  metaKeywords       String?
+  bundles            Json?
+  sizeGuide          Json?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  orderItems         OrderItem[]
+  colorVariants      ColorVariant[]
+  stockNotifications StockNotification[]
 }
 
 model ColorVariant {
-  id        String         @id @default(uuid())
+  id        String        @id @default(uuid())
   productId String
-  product   Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product   Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
   name      String
   images    String[]
-  createdAt DateTime       @default(now())
+  createdAt DateTime      @default(now())
   sizes     SizeVariant[]
 }
 
@@ -109,6 +111,15 @@ model Coupon {
   expiresAt     DateTime?
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
+}
+
+model StockNotification {
+  id        String   @id @default(uuid())
+  productId String
+  phone     String
+  notified  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 }
 
 enum OrderStatus {

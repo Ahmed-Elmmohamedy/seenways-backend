@@ -33,7 +33,7 @@ router.get("/", async (req, res) => {
   }
 });
 
-// ADMIN - Get all products (before /:slug to avoid conflict)
+// ADMIN - Get all products
 router.get("/admin/all", auth, async (req, res) => {
   try {
     const { search, category, status } = req.query;
@@ -60,10 +60,10 @@ router.get("/:slug", async (req, res) => {
   }
 });
 
-// ADMIN - Create product with color variants
+// ADMIN - Create product
 router.post("/", auth, async (req, res) => {
   try {
-    const { name, description, price, oldPrice, images, sizes, colors, stock, isActive, isFeatured, categoryId, metaTitle, metaDescription, metaKeywords, colorVariants, bundles } = req.body;
+    const { name, description, price, oldPrice, images, sizes, colors, stock, isActive, isFeatured, categoryId, metaTitle, metaDescription, metaKeywords, colorVariants, bundles, sizeGuide } = req.body;
     if (!name || !price) return res.status(400).json({ error: "Name and price are required" });
     let slug = slugify(name);
     const existing = await prisma.product.findUnique({ where: { slug } });
@@ -85,7 +85,7 @@ router.post("/", auth, async (req, res) => {
         metaDescription: metaDescription || null,
         metaKeywords: metaKeywords || null,
         bundles: bundles || null,
-        // Create color variants if provided
+        sizeGuide: sizeGuide || null,
         colorVariants: colorVariants?.length ? {
           create: colorVariants.map(cv => ({
             name: cv.name,
@@ -110,7 +110,7 @@ router.post("/", auth, async (req, res) => {
 // ADMIN - Update product
 router.put("/:id", auth, async (req, res) => {
   try {
-    const { name, description, price, oldPrice, images, sizes, colors, stock, isActive, isFeatured, categoryId, metaTitle, metaDescription, metaKeywords, colorVariants, bundles } = req.body;
+    const { name, description, price, oldPrice, images, sizes, colors, stock, isActive, isFeatured, categoryId, metaTitle, metaDescription, metaKeywords, colorVariants, bundles, sizeGuide } = req.body;
     const data = {};
     if (name !== undefined) { data.name = name; data.slug = slugify(name); }
     if (description !== undefined) data.description = description;
@@ -127,8 +127,8 @@ router.put("/:id", auth, async (req, res) => {
     if (metaDescription !== undefined) data.metaDescription = metaDescription || null;
     if (metaKeywords !== undefined) data.metaKeywords = metaKeywords || null;
     if (bundles !== undefined) data.bundles = bundles || null;
+    if (sizeGuide !== undefined) data.sizeGuide = sizeGuide || null;
 
-    // Update color variants: delete all and recreate
     if (colorVariants !== undefined) {
       await prisma.colorVariant.deleteMany({ where: { productId: req.params.id } });
       if (colorVariants.length > 0) {

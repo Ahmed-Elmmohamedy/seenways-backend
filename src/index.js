@@ -4,6 +4,7 @@ const cors = require("cors");
 
 const productRoutes = require("./routes/products");
 const orderRoutes = require("./routes/orders");
+const notificationsRouter = require("./routes/notifications");
 const adminRoutes = require("./routes/admin");
 const uploadRoutes = require("./routes/upload");
 const categoryRoutes = require("./routes/categories");
@@ -23,6 +24,7 @@ app.get("/", (req, res) => res.json({ status: "ok", message: "SEENWAYS API is ru
 
 app.use("/api/products", productRoutes);
 app.use("/api/orders", orderRoutes);
+app.use("/api/notifications", notificationsRouter);
 app.use("/api/admin", adminRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/categories", categoryRoutes);
